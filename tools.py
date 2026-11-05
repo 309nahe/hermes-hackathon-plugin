@@ -1022,7 +1022,8 @@ def _targets(conn: sqlite3.Connection, package: Optional[str], ecosystem: Option
         clauses.append("ecosystem = ?")
         params.append(ecosystem)
     rows = conn.execute(
-        f"SELECT id, ecosystem, package, fixed_version FROM findings WHERE {' AND '.join(clauses)}",
+        f"SELECT id, ecosystem, package, version, fixed_version "
+        f"FROM findings WHERE {' AND '.join(clauses)}",
         params,
     ).fetchall()
     grouped: dict[tuple[str, str], dict] = {}
@@ -1030,11 +1031,112 @@ def _targets(conn: sqlite3.Connection, package: Optional[str], ecosystem: Option
         key = (str(row["ecosystem"]), str(row["package"]))
         target = grouped.setdefault(
             key,
-            {"ecosystem": key[0], "package": key[1], "version": "", "finding_ids": []},
+            {
+                "ecosystem": key[0],
+                "package": key[1],
+                "fixed_version": "",
+                "scanned_version": "",
+                "finding_ids": [],
+            },
         )
         target["finding_ids"].append(int(row["id"]))
-        target["version"] = _newest([target["version"], str(row["fixed_version"])])
+        target["fixed_version"] = _newest([target["fixed_version"], str(row["fixed_version"])])
+        scanned = str(row["version"] or "").strip()
+        if scanned and not target["scanned_version"]:
+            target["scanned_version"] = scanned
     return list(grouped.values())
+
+
+def _version_probe_command(ecosystem: str, package: str) -> list[str]:
+    """Return the argv that reports the installed version of one package."""
+    if ecosystem == "pip":
+        return [sys.executable, "-m", "pip", "show", package]
+    if ecosystem == "npm":
+        return ["npm", "ls", "-g", package, "--json", "--depth=0"]
+    if ecosystem == "dpkg":
+        return ["dpkg-query", "-W", "-f=${Version}", package]
+    if ecosystem == "cargo":
+        return ["cargo", "install", "--list"]
+    raise ValueError(f"unsupported ecosystem: {ecosystem}")
+
+
+def _extract_installed_version(ecosystem: str, package: str, output: str) -> str:
+    """Parse the output of ``_version_probe_command`` for one package."""
+    if ecosystem == "pip":
+        for line in (output or "").splitlines():
+            name, _, value = line.partition(":")
+            if name.strip().lower() == "version":
+                return value.strip()
+        return ""
+    if ecosystem == "npm":
+        try:
+            parsed = json.loads(output or "{}")
+        except (TypeError, ValueError):
+            return ""
+        deps = parsed.get("dependencies") if isinstance(parsed, dict) else {}
+        meta = (deps or {}).get(package)
+        return str((meta or {}).get("version") or "").strip() if isinstance(meta, dict) else ""
+    if ecosystem == "dpkg":
+        for line in (output or "").splitlines():
+            if line.strip():
+                return line.strip()
+        return ""
+    if ecosystem == "cargo":
+        pattern = re.compile(rf"^\s*{re.escape(package)}\s+v?([^\s:]+)")
+        for line in (output or "").splitlines():
+            match = pattern.match(line)
+            if match:
+                return match.group(1).strip()
+        return ""
+    return ""
+
+
+def _probe_installed_version(ecosystem: str, package: str, dispatch: Callable) -> dict:
+    """Ask the terminal what version of ``package`` is actually installed."""
+    try:
+        argv = _version_probe_command(ecosystem, package)
+    except ValueError as exc:
+        return {"installed_version": "", "command": "", "exit_code": None, "error": str(exc)}
+    command = shlex.join(argv)
+    try:
+        outcome = _parse_terminal_result(
+            dispatch("terminal", {"command": command, "timeout": DEFAULT_COMMAND_TIMEOUT})
+        )
+    except Exception as exc:
+        return {"installed_version": "", "command": command, "exit_code": None, "error": str(exc)}
+    if not outcome.get("ok"):
+        return {
+            "installed_version": "",
+            "command": command,
+            "exit_code": outcome.get("exit_code"),
+            "error": outcome.get("error") or "version probe failed",
+        }
+    installed = _extract_installed_version(ecosystem, package, outcome.get("output") or "")
+    return {
+        "installed_version": installed,
+        "command": command,
+        "exit_code": outcome.get("exit_code"),
+        "error": None if installed else "could not read the installed version",
+    }
+
+
+def _verify_upgrade(target: dict, installed_version: str) -> tuple[bool, Optional[str]]:
+    """Decide whether an exit-0 upgrade actually closed the finding.
+
+    A zero exit code only says the package manager accepted the command. The
+    finding is closed only when the installed version moved off the scanned
+    version and reached the advertised fixed version.
+    """
+    installed = str(installed_version or "").strip()
+    fixed = str(target.get("fixed_version") or "").strip()
+    scanned = str(target.get("scanned_version") or "").strip()
+    if not installed:
+        return False, "could not read the installed version after the upgrade"
+    if scanned and installed == scanned:
+        return False, f"package is still at the vulnerable version {scanned}"
+    if fixed and _version_key(installed) < _version_key(fixed):
+        return False, f"installed version {installed} is older than the fixed version {fixed}"
+    return True, None
 
 
 def _parse_terminal_result(raw: Any) -> dict:
@@ -1103,7 +1205,10 @@ def rookguard_fix(
     for target in targets:
         try:
             argv = build_upgrade_command(
-                target["ecosystem"], target["package"], target["version"], use_sudo=use_sudo
+                target["ecosystem"],
+                target["package"],
+                target["fixed_version"],
+                use_sudo=use_sudo,
             )
         except ValueError as exc:
             failed.append({**target, "error": str(exc)})
@@ -1115,27 +1220,51 @@ def rookguard_fix(
             )
         except Exception as exc:
             outcome = {"ok": False, "output": "", "error": str(exc), "exit_code": None}
-        status = "fixed" if outcome.get("ok") else "failed"
+
+        probe: dict = {"installed_version": "", "command": "", "exit_code": None, "error": None}
+        verified = False
+        verification_error: Optional[str] = None
+        if outcome.get("ok"):
+            probe = _probe_installed_version(target["ecosystem"], target["package"], dispatch)
+            verified, verification_error = _verify_upgrade(target, probe["installed_version"])
+
+        status = "fixed" if verified else "failed"
+        verification = {
+            "verified": verified,
+            "installed_version": probe.get("installed_version") or "",
+            "command": probe.get("command") or "",
+            "error": verification_error,
+        }
+        output = outcome.get("output") or ""
+        if not verified and probe.get("error"):
+            output = f"{output}\nverification: {probe['error']}".strip()
         try:
             with conn:
-                _mark_findings(conn, target["finding_ids"], status, outcome.get("output") or "")
+                _mark_findings(conn, target["finding_ids"], status, output)
         except Exception:
             logger.warning("RookGuard could not record the fix outcome", exc_info=True)
         record = {
             **target,
             "command": command,
             "exit_code": outcome.get("exit_code"),
-            "output": (outcome.get("output") or "")[-2000:],
-            "error": outcome.get("error"),
+            "output": output[-2000:],
+            "error": outcome.get("error") or (None if verified else verification_error),
+            "verified_version": probe.get("installed_version") or "",
+            "verification": verification,
         }
-        (fixed if outcome.get("ok") else failed).append(record)
+        (fixed if verified else failed).append(record)
 
     return _json(
         {
             "ok": bool(fixed),
             "fixed": fixed,
             "failed": failed,
-            "next": "Run rookguard_status to confirm the findings cleared, then rookguard_scan.",
+            "next": (
+                "Run rookguard_status to confirm the findings cleared, then rookguard_scan."
+                if fixed
+                else "Nothing was verified as fixed; check the command output and the "
+                "installed versions, then retry."
+            ),
         }
     )
 
@@ -1272,9 +1401,15 @@ def make_command_handler(handlers: dict[str, Callable]) -> Callable[[str], str]:
             failed = payload.get("failed") or []
             lines = [f"RookGuard fix: {len(fixed)} succeeded, {len(failed)} failed."]
             for item in fixed:
-                lines.append(f"  upgraded {item.get('package')} -> {item.get('version')}")
+                lines.append(
+                    f"  upgraded {item.get('package')} -> "
+                    f"{item.get('verified_version') or item.get('fixed_version')}"
+                )
             for item in failed:
-                lines.append(f"  failed {item.get('package')}: {item.get('error') or 'non-zero exit'}")
+                lines.append(
+                    f"  failed {item.get('package')}: "
+                    f"{item.get('error') or 'not verified as fixed'}"
+                )
             return "\n".join(lines)
         return "Usage: /rookguard inventory|scan|status|fix [package|all]"
 

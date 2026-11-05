@@ -302,23 +302,101 @@ def test_status_severity_filter(conn):
     assert payload["groups"]["critical"][0]["package"] == "openssl"
 
 
+def _pip_probe_output(version):
+    return f"Name: requests\nVersion: {version}\nLocation: /tmp/x\n"
+
+
 def test_fix_runs_command_and_marks_finding(conn):
-    _seed_finding(conn, package="requests", fixed="2.31.0")
+    _seed_finding(conn, package="requests", version="2.28.0", fixed="2.31.0")
     calls = []
 
     def fake_dispatch(name, args):
         calls.append((name, args))
+        command = args.get("command", "")
+        if "pip show" in command:
+            return json.dumps({"output": _pip_probe_output("2.31.0"), "exit_code": 0, "error": None})
         return json.dumps({"output": "Successfully installed requests-2.31.0", "exit_code": 0, "error": None})
 
     payload = json.loads(tools.rookguard_fix({"package": "requests"}, dispatch=fake_dispatch, use_sudo=False))
     assert payload["ok"] is True
     assert payload["fixed"][0]["package"] == "requests"
+    assert payload["fixed"][0]["verified_version"] == "2.31.0"
+    assert payload["fixed"][0]["verification"]["verified"] is True
     assert calls[0][0] == "terminal"
     assert "requests==2.31.0" in calls[0][1]["command"]
+    assert any("pip show" in c[1]["command"] for c in calls)
 
     row = conn.execute("SELECT status, fixed_version FROM findings").fetchone()
     assert row["status"] == "fixed"
     assert row["fixed_version"] == "2.31.0"
+
+
+def test_fix_stale_version_stays_failed(conn):
+    _seed_finding(conn, package="requests", version="2.28.0", fixed="2.31.0")
+
+    def fake_dispatch(name, args):
+        command = args.get("command", "")
+        if "pip show" in command:
+            return json.dumps({"output": _pip_probe_output("2.28.0"), "exit_code": 0, "error": None})
+        return json.dumps({"output": "Requirement already satisfied", "exit_code": 0, "error": None})
+
+    payload = json.loads(tools.rookguard_fix({"package": "requests"}, dispatch=fake_dispatch, use_sudo=False))
+    assert payload["ok"] is False
+    assert len(payload["fixed"]) == 0
+    assert payload["failed"][0]["package"] == "requests"
+    assert "2.28.0" in (payload["failed"][0]["error"] or "")
+    assert conn.execute("SELECT status FROM findings").fetchone()["status"] == "failed"
+
+
+def test_fix_probe_failure_stays_failed(conn):
+    _seed_finding(conn, package="requests", version="2.28.0", fixed="2.31.0")
+
+    def fake_dispatch(name, args):
+        command = args.get("command", "")
+        if "pip show" in command:
+            return json.dumps({"output": "", "exit_code": 1, "error": None})
+        return json.dumps({"output": "Successfully installed requests-2.31.0", "exit_code": 0, "error": None})
+
+    payload = json.loads(tools.rookguard_fix({"package": "requests"}, dispatch=fake_dispatch, use_sudo=False))
+    assert payload["ok"] is False
+    assert payload["failed"][0]["verification"]["verified"] is False
+    assert conn.execute("SELECT status FROM findings").fetchone()["status"] == "failed"
+
+
+def test_fix_dpkg_requires_version_change(conn):
+    _seed_finding(conn, package="openssl", ecosystem="dpkg", version="3.0.11-1", fixed="3.0.12-1")
+
+    def fake_dispatch(name, args):
+        command = args.get("command", "")
+        if "dpkg-query" in command:
+            return json.dumps({"output": "3.0.11-1", "exit_code": 0, "error": None})
+        return json.dumps({"output": "openssl is already the newest version", "exit_code": 0, "error": None})
+
+    payload = json.loads(tools.rookguard_fix({"package": "openssl"}, dispatch=fake_dispatch, use_sudo=False))
+    assert payload["ok"] is False
+    assert conn.execute("SELECT status FROM findings").fetchone()["status"] == "failed"
+
+
+def test_verify_upgrade_compares_versions():
+    target = {"package": "requests", "ecosystem": "pip", "fixed_version": "2.31.0", "scanned_version": "2.28.0"}
+    assert tools._verify_upgrade(target, "2.31.0") == (True, None)
+    # Newer than fixed is also fine.
+    assert tools._verify_upgrade(target, "2.32.0")[0] is True
+    ok, reason = tools._verify_upgrade(target, "2.28.0")
+    assert ok is False and "2.28.0" in (reason or "")
+    ok, reason = tools._verify_upgrade(target, "2.29.0")
+    assert ok is False and "2.29.0" in (reason or "")
+    ok, reason = tools._verify_upgrade(target, "")
+    assert ok is False
+
+
+def test_extract_installed_version_parsers():
+    assert tools._extract_installed_version("pip", "requests", _pip_probe_output("2.31.0")) == "2.31.0"
+    npm_out = json.dumps({"dependencies": {"lodash": {"version": "4.17.21"}}})
+    assert tools._extract_installed_version("npm", "lodash", npm_out) == "4.17.21"
+    assert tools._extract_installed_version("dpkg", "openssl", "3.0.12-1\n") == "3.0.12-1"
+    cargo_out = "ripgrep v13.0.0:\n    ripgrep 13.0.0 (registry+https://github.com/rust-lang/crates.io-index)"
+    assert tools._extract_installed_version("cargo", "ripgrep", cargo_out) == "13.0.0"
 
 
 def test_fix_records_failure(conn):

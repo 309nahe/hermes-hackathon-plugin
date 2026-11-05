@@ -361,6 +361,32 @@ def test_status_severity_filter(conn):
     assert payload["groups"]["critical"][0]["package"] == "openssl"
 
 
+def test_status_counts_cover_all_findings_beyond_limit(conn):
+    for i in range(10):
+        _seed_finding(conn, cve=f"CVE-C-{i}", rating="critical", package=f"crit-{i}")
+    for i in range(50):
+        _seed_finding(conn, cve=f"CVE-L-{i}", rating="low", package=f"low-{i}")
+
+    payload = json.loads(tools.rookguard_status({"limit": 10}))
+    assert payload["ok"] is True
+    assert payload["total"] == 60
+    assert payload["returned"] == 10
+    assert payload["summary"]["critical"] == 10
+    assert payload["summary"]["low"] == 50
+
+
+def test_briefing_counts_cover_all_findings(conn):
+    for i in range(3):
+        _seed_finding(conn, cve=f"CVE-C-{i}", rating="critical", package=f"crit-{i}")
+    for i in range(7):
+        _seed_finding(conn, cve=f"CVE-L-{i}", rating="low", package=f"low-{i}")
+    briefing = tools.build_briefing()
+    assert briefing is not None
+    assert "3 critical" in briefing
+    # exact low count, not a capped page
+    assert "7 low" in briefing
+
+
 def _pip_probe_output(version):
     return f"Name: requests\nVersion: {version}\nLocation: /tmp/x\n"
 

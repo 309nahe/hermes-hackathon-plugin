@@ -25,7 +25,7 @@ jobs:
       - name: Fetch Hermes Agent
         run: |
           git clone --depth=1 https://github.com/NousResearch/hermes-agent.git /tmp/hermes-agent
-          cd /tmp/hermes-agent && uv sync --extra dev 2>/dev/null || uv sync
+          cd /tmp/hermes-agent && uv sync --group dev
 
       - name: Validate plugin
         working-directory: /tmp/hermes-agent

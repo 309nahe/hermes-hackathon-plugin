@@ -4,7 +4,7 @@ name: rookguard
 repo: https://github.com/309nahe/hermes-hackathon-plugin
 sha: 129bcc0f1aae341207205a633a1fb83b653b00ef
 subdir: ""
-description: "RookGuard: environment inventory, CVE scanning, and guided remediation for Hermes Agent."
+description: "Track, scan, fix: inventory the packages on the host where the agent runs, scan them against cve.now, and apply user-approved upgrades."
 maintainer: 309nahe
 tier: community
 category: tools
@@ -16,7 +16,13 @@ platforms:
   - macos
 capabilities:
   provides_tools:
-    - ping
-  provides_hooks: []
+    - rookguard_inventory
+    - rookguard_scan
+    - rookguard_status
+    - rookguard_fix
+  provides_hooks:
+    - post_tool_call
+    - on_session_start
+    - pre_llm_call
   provides_middleware: []
   requires_env: []

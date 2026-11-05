@@ -2,19 +2,30 @@ name: rookguard
 version: "0.0.1"
 manifest_version: 2
 api_version: 1
-description: "RookGuard: environment inventory, CVE scanning, and guided remediation for Hermes Agent."
+description: "Track, scan, fix: inventory the packages on the host where the agent runs, scan them nightly against cve.now, and present prioritized findings with user-approved upgrades."
 author: "309nahe"
 license: "MIT"
 homepage: "https://github.com/309nahe/hermes-hackathon-plugin"
 requires_hermes: ">=0.22.0"
 provides_tools:
-  - ping
-provides_hooks: []
+  - rookguard_inventory
+  - rookguard_scan
+  - rookguard_status
+  - rookguard_fix
+provides_hooks:
+  - post_tool_call
+  - on_session_start
+  - pre_llm_call
 capabilities: {}
 python_dependencies: []
-config_schema: {}
+config_schema:
+  use_sudo:
+    type: bool
+    default: true
+    description: "Run fix commands with sudo (v1 default; user-level-only mode is a TODO)."
 tags:
   - security
-  - cve
   - inventory
+  - cve
+  - remediation
   - hackathon

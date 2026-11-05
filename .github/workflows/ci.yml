@@ -35,5 +35,4 @@ jobs:
       - name: Run tests
         working-directory: /tmp
         run: |
-          /tmp/hermes-agent/.venv/bin/python -m pytest -q $GITHUB_WORKSPACE/tests/ || true
-        continue-on-error: true
+          /tmp/hermes-agent/.venv/bin/python -m pytest -q $GITHUB_WORKSPACE/tests/

@@ -215,6 +215,65 @@ def test_inventory_empty_snapshot_clears_ecosystem(conn, monkeypatch):
     assert conn.execute("SELECT COUNT(*) FROM packages").fetchone()[0] == 0
 
 
+def test_scan_resolves_missing_hook_version(conn, monkeypatch):
+    tools._upsert_package(conn, "requests", "pip", "", "hook")
+    conn.commit()
+    seen = {}
+
+    def fake_dispatch(name, args):
+        assert name == "terminal"
+        assert "pip show" in args["command"]
+        return json.dumps({"output": "Name: requests\nVersion: 2.28.0\n", "exit_code": 0, "error": None})
+
+    def fake_check(packages, dispatch=None):
+        seen["packages"] = packages
+        return {"checked": len(packages), "affected": [], "mode": "https"}
+
+    monkeypatch.setattr(tools, "_check_stack", fake_check)
+    payload = json.loads(tools.rookguard_scan({}, dispatch=fake_dispatch))
+    assert payload["ok"] is True
+    assert payload["checked"] == 1
+    assert seen["packages"][0]["version"] == "2.28.0"
+    assert payload["resolved_versions"] == [
+        {"ecosystem": "pip", "name": "requests", "version": "2.28.0"}
+    ]
+    assert payload["unresolved_versions"] == []
+    assert conn.execute("SELECT version FROM packages WHERE name = 'requests'").fetchone()["version"] == "2.28.0"
+
+
+def test_scan_reports_unresolvable_version(conn, monkeypatch):
+    tools._upsert_package(conn, "requests", "pip", "", "hook")
+    conn.commit()
+
+    def fake_dispatch(name, args):
+        return json.dumps({"output": "", "exit_code": 1, "error": None})
+
+    called = {"n": 0}
+
+    def fake_check(packages, dispatch=None):
+        called["n"] += 1
+        return {"checked": 0, "affected": [], "mode": "https"}
+
+    monkeypatch.setattr(tools, "_check_stack", fake_check)
+    payload = json.loads(tools.rookguard_scan({}, dispatch=fake_dispatch))
+    assert payload["ok"] is False
+    assert called["n"] == 0
+    assert payload["unresolved_versions"][0]["name"] == "requests"
+    assert conn.execute("SELECT version FROM packages WHERE name = 'requests'").fetchone()["version"] == ""
+
+
+def test_resolve_missing_versions_local_fallback(conn, monkeypatch):
+    tools._upsert_package(conn, "requests", "pip", "", "hook")
+    conn.commit()
+    monkeypatch.setattr(
+        tools, "_run_command_sync", lambda argv, timeout=60: "Name: requests\nVersion: 2.28.0\n"
+    )
+    resolution = tools._resolve_missing_versions(conn, dispatch=None)
+    conn.commit()
+    assert resolution["resolved"] == [{"ecosystem": "pip", "name": "requests", "version": "2.28.0"}]
+    assert resolution["unresolved"] == []
+
+
 def test_scan_stores_findings(conn, monkeypatch):
     tools._upsert_package(conn, "requests", "pip", "2.28.0", "snapshot")
     conn.commit()

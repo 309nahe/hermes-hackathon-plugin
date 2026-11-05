@@ -36,6 +36,14 @@ Fill in before submission:
 - Stored credentials: none yet
 - Telemetry: none (opt-in only)
 
+## Dev notes
+
+- Run tests from outside the repo directory (e.g. `/tmp`) to avoid the local
+  `tools.py` shadowing Hermes's `tools` package: `cd /tmp && pytest /path/to/tests`.
+- The plugin is loaded by Hermes as `hermes_plugins.<slug>`, so intra-plugin
+  imports must be relative (`from .schemas import ...`).
+- `make validate` runs the same check the catalog CI runs.
+
 ## Rename before submission
 
 1. Update `name` in `plugin.yaml` and the repo name.

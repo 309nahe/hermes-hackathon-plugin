@@ -36,6 +36,18 @@ changes, split it into multiple issues first.
 - If an issue turns out to contain several independent steps, split it before
   starting.
 
+## Workspace handoff: keep UPDATE.md current
+
+`UPDATE.md` is the handoff for continuing this work from another workspace
+(VPS, new checkout, agentic coding). Read it first on a fresh machine.
+
+- After every merged PR / closed issue, update `UPDATE.md`: what changed
+  (issue by issue), current `main` HEAD, test count, open backlog, resume
+  commands.
+- Exception to "never push to `main`": `UPDATE.md`-only handoff updates may
+  be committed and pushed directly to `main` when the maintainer explicitly
+  asks for it (no PR needed). All code changes still go through branch + PR.
+
 ## Quality gate
 
 Run from a neutral working directory (not the repo root, where the local

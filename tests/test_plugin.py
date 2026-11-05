@@ -44,18 +44,18 @@ def test_plugin_loads(tmp_path, monkeypatch):
 
     hermes_home = tmp_path / "hermes"
     (hermes_home / "plugins").mkdir(parents=True)
-    plugin_dir = hermes_home / "plugins" / "hermes-hackathon-plugin"
+    plugin_dir = hermes_home / "plugins" / "rookguard"
     plugin_dir.symlink_to(Path(__file__).resolve().parents[1])
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
 
     import hermes_yaml as yaml
 
-    cfg = {"plugins": {"enabled": ["hermes-hackathon-plugin"]}}
+    cfg = {"plugins": {"enabled": ["rookguard"]}}
     (hermes_home / "config.yaml").write_text(yaml.safe_dump(cfg))
 
     from hermes_cli.plugins import PluginManager
 
     pm = PluginManager()
     pm.discover_and_load()
-    assert "hermes-hackathon-plugin" in pm._plugins
+    assert "rookguard" in pm._plugins
 

@@ -1,8 +1,8 @@
-name: hermes-hackathon-plugin
+name: rookguard
 version: "0.0.1"
 manifest_version: 2
 api_version: 1
-description: "Starter scaffold for the Hermes Agent Plugin Hackathon. Rename and implement before submission."
+description: "RookGuard: environment inventory, CVE scanning, and guided remediation for Hermes Agent."
 author: "309nahe"
 license: "MIT"
 homepage: "https://github.com/309nahe/hermes-hackathon-plugin"
@@ -14,5 +14,7 @@ capabilities: {}
 python_dependencies: []
 config_schema: {}
 tags:
+  - security
+  - cve
+  - inventory
   - hackathon
-  - starter

@@ -3,7 +3,7 @@
 # Idempotent: safe to re-run.
 set -euo pipefail
 
-PLUGIN_NAME="${PLUGIN_NAME:-hermes-hackathon-plugin}"
+PLUGIN_NAME="${PLUGIN_NAME:-rookguard}"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 
 say() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }

@@ -1,10 +1,10 @@
-# Draft catalog entry. Submit to NousResearch/hermes-agent as plugin-catalog/hermes-hackathon-plugin.yaml
+# Draft catalog entry. Submit to NousResearch/hermes-agent as plugin-catalog/rookguard.yaml
 # after the plugin is implemented and a 40-char SHA is pinned.
 name: rookguard
 repo: https://github.com/309nahe/hermes-hackathon-plugin
 sha: 129bcc0f1aae341207205a633a1fb83b653b00ef
 subdir: ""
-description: "TODO: let your agent secure your box"
+description: "RookGuard: environment inventory, CVE scanning, and guided remediation for Hermes Agent."
 maintainer: 309nahe
 tier: community
 category: tools

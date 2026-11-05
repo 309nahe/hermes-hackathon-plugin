@@ -1,6 +1,6 @@
 .PHONY: validate test enable doctor bootstrap
 
-PLUGIN_NAME ?= hermes-hackathon-plugin
+PLUGIN_NAME ?= rookguard
 HERMES_HOME ?= $(HOME)/.hermes
 
 validate:

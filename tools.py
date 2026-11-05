@@ -678,10 +678,78 @@ def _check_stack(packages: list[dict], dispatch: Optional[Callable] = None) -> d
     return {**result, "mode": "https"}
 
 
-def _packages_for_check(conn: sqlite3.Connection, ecosystems: Optional[set[str]]) -> tuple[list[dict], list[str]]:
+def _resolve_package_version_local(ecosystem: str, package: str) -> str:
+    """Read the installed version without a terminal dispatch (local subprocess)."""
+    try:
+        argv = _version_probe_command(ecosystem, package)
+    except ValueError:
+        return ""
+    try:
+        output = _run_command_sync(argv, timeout=60)
+    except Exception:
+        return ""
+    return _extract_installed_version(ecosystem, package, output)
+
+
+def _resolve_missing_versions(
+    conn: sqlite3.Connection,
+    dispatch: Optional[Callable] = None,
+    ecosystems: Optional[set[str]] = None,
+) -> dict:
+    """Resolve empty versions in ``packages`` and persist them.
+
+    Hook-tracked installs often lack a version (``pip install requests``).
+    For each row with an empty version, ask the owning tool for the installed
+    version — via the terminal dispatch when available, otherwise via a local
+    subprocess — and persist it. Returns ``{resolved, unresolved}``; a single
+    failing package never aborts the scan.
+    """
+    rows = conn.execute(
+        "SELECT name, ecosystem FROM packages WHERE version IS NULL OR version = '' "
+        "ORDER BY ecosystem, name"
+    ).fetchall()
+    resolved: list[dict] = []
+    unresolved: list[dict] = []
+    for row in rows:
+        name = str(row["name"] or "").strip()
+        ecosystem = str(row["ecosystem"] or "").strip()
+        if not name:
+            continue
+        if ecosystems and ecosystem not in ecosystems:
+            continue
+        installed = ""
+        error: Optional[str] = None
+        try:
+            if dispatch is not None:
+                probe = _probe_installed_version(ecosystem, name, dispatch)
+                installed = str(probe.get("installed_version") or "").strip()
+                error = probe.get("error")
+            else:
+                installed = _resolve_package_version_local(ecosystem, name).strip()
+                if not installed:
+                    error = "could not read the installed version"
+        except Exception as exc:
+            error = str(exc)
+        if installed:
+            conn.execute(
+                "UPDATE packages SET version = ?, last_seen = ? WHERE name = ? AND ecosystem = ?",
+                (installed, _now(), name, ecosystem),
+            )
+            resolved.append({"ecosystem": ecosystem, "name": name, "version": installed})
+        else:
+            unresolved.append(
+                {"ecosystem": ecosystem, "name": name, "error": error or "could not read the installed version"}
+            )
+    return {"resolved": resolved, "unresolved": unresolved}
+
+
+def _packages_for_check(
+    conn: sqlite3.Connection, ecosystems: Optional[set[str]]
+) -> tuple[list[dict], list[str], list[dict]]:
     rows = conn.execute("SELECT name, ecosystem, version FROM packages ORDER BY ecosystem, name").fetchall()
     packages: list[dict] = []
     skipped: list[str] = []
+    unresolved: list[dict] = []
     for row in rows:
         ecosystem = str(row["ecosystem"])
         if ecosystems and ecosystem not in ecosystems:
@@ -692,9 +760,16 @@ def _packages_for_check(conn: sqlite3.Connection, ecosystems: Optional[set[str]]
             continue
         version = str(row["version"] or "").strip()
         if not version:
+            unresolved.append(
+                {
+                    "ecosystem": ecosystem,
+                    "name": str(row["name"]),
+                    "error": "missing version: reinstall with a pinned version or run rookguard_inventory",
+                }
+            )
             continue
         packages.append({"ecosystem": cve_ecosystem, "name": str(row["name"]), "version": version})
-    return packages, sorted(set(skipped))
+    return packages, sorted(set(skipped)), unresolved
 
 
 def _store_findings(
@@ -787,11 +862,21 @@ def rookguard_scan(args: Optional[dict] = None, *, dispatch: Optional[Callable] 
     except Exception as exc:
         return _error(f"RookGuard storage unavailable: {exc}")
 
-    packages, skipped = _packages_for_check(conn, ecosystem_filter)
+    try:
+        resolution = _resolve_missing_versions(conn, dispatch=dispatch, ecosystems=ecosystem_filter)
+        conn.commit()
+    except Exception as exc:  # defensive: resolution must never fail the scan
+        logger.warning("RookGuard version resolution failed: %s", exc)
+        resolution = {"resolved": [], "unresolved": []}
+    resolved_versions = resolution.get("resolved") or []
+
+    packages, skipped, unresolved = _packages_for_check(conn, ecosystem_filter)
     if not packages:
         return _error(
             "No scannable packages in the inventory. Run rookguard_inventory first.",
             skipped_ecosystems=skipped,
+            resolved_versions=resolved_versions,
+            unresolved_versions=unresolved,
         )
 
     started = _now()
@@ -849,6 +934,8 @@ def rookguard_scan(args: Optional[dict] = None, *, dispatch: Optional[Callable] 
             scan_id=scan_id,
             detail=cve_error,
             skipped_ecosystems=skipped,
+            resolved_versions=resolved_versions,
+            unresolved_versions=unresolved,
         )
 
     visible = [
@@ -869,6 +956,8 @@ def rookguard_scan(args: Optional[dict] = None, *, dispatch: Optional[Callable] 
             "checked": checked,
             "affected": visible,
             "skipped_ecosystems": skipped,
+            "resolved_versions": resolved_versions,
+            "unresolved_versions": unresolved,
             "mode": ",".join(sorted(modes)),
         },
     )
@@ -882,6 +971,8 @@ def rookguard_scan(args: Optional[dict] = None, *, dispatch: Optional[Callable] 
             "min_severity": min_severity,
             "mode": ",".join(sorted(modes)),
             "skipped_ecosystems": skipped,
+            "resolved_versions": resolved_versions,
+            "unresolved_versions": unresolved,
             "report": report_path,
             "next": "Run rookguard_status for details, then rookguard_fix to upgrade.",
         }

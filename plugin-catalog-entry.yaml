@@ -4,7 +4,7 @@ name: rookguard
 repo: https://github.com/309nahe/hermes-hackathon-plugin
 sha: 129bcc0f1aae341207205a633a1fb83b653b00ef
 subdir: ""
-description: "TODO: one-line description"
+description: "TODO: let your agent secure your box"
 maintainer: 309nahe
 tier: community
 category: tools

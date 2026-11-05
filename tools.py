@@ -893,14 +893,12 @@ def rookguard_scan(args: Optional[dict] = None, *, dispatch: Optional[Callable] 
 # --------------------------------------------------------------------------- #
 
 
-def _query_findings(
-    conn: sqlite3.Connection,
+def _finding_where(
     *,
     severity: Optional[str] = None,
     ecosystem: Optional[str] = None,
     include_fixed: bool = False,
-    limit: int = 50,
-) -> tuple[list[dict], int]:
+) -> tuple[str, list[Any]]:
     clauses = ["1 = 1"]
     params: list[Any] = []
     if include_fixed:
@@ -916,7 +914,39 @@ def _query_findings(
             "WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END >= ?"
         )
         params.append(SEVERITY_ORDER[severity])
-    where = " AND ".join(clauses)
+    return " AND ".join(clauses), params
+
+
+def _finding_summary(
+    conn: sqlite3.Connection,
+    *,
+    severity: Optional[str] = None,
+    ecosystem: Optional[str] = None,
+    include_fixed: bool = False,
+) -> dict:
+    """Exact per-severity counts over all matching findings (no page limit)."""
+    where, params = _finding_where(severity=severity, ecosystem=ecosystem, include_fixed=include_fixed)
+    summary: dict[str, int] = {name: 0 for name in ("critical", "high", "medium", "low", "unknown")}
+    total = 0
+    for row in conn.execute(
+        f"SELECT rating, COUNT(*) AS n FROM findings WHERE {where} GROUP BY rating", params
+    ).fetchall():
+        rating = str(row["rating"] or "unknown")
+        count = int(row["n"])
+        summary[rating] = summary.get(rating, 0) + count
+        total += count
+    return {"total": total, "summary": summary}
+
+
+def _query_findings(
+    conn: sqlite3.Connection,
+    *,
+    severity: Optional[str] = None,
+    ecosystem: Optional[str] = None,
+    include_fixed: bool = False,
+    limit: int = 50,
+) -> tuple[list[dict], int]:
+    where, params = _finding_where(severity=severity, ecosystem=ecosystem, include_fixed=include_fixed)
     total = int(conn.execute(f"SELECT COUNT(*) FROM findings WHERE {where}", params).fetchone()[0])
     rows = conn.execute(
         f"""
@@ -962,14 +992,22 @@ def rookguard_status(args: Optional[dict] = None, **kwargs: Any) -> str:
             include_fixed=include_fixed,
             limit=limit,
         )
+        exact = _finding_summary(
+            conn,
+            severity=severity,
+            ecosystem=ecosystem,
+            include_fixed=include_fixed,
+        )
         last_scan = _last_scan(conn)
     except Exception as exc:
         return _error(f"RookGuard storage unavailable: {exc}")
 
+    # ``groups`` is the requested page; ``summary``/``total`` cover every match.
     groups: dict[str, list[dict]] = {name: [] for name in ("critical", "high", "medium", "low", "unknown")}
     for row in rows:
         groups.setdefault(row.get("rating") or "unknown", []).append(row)
-    summary = {name: len(items) for name, items in groups.items()}
+    summary = exact["summary"]
+    total = exact["total"]
     return _json(
         {
             "ok": True,
@@ -1279,10 +1317,11 @@ def build_briefing(stale_after_hours: int = 12) -> Optional[str]:
     try:
         conn = _db()
         last_scan = _last_scan(conn)
-        rows, _total = _query_findings(conn, limit=500)
+        exact = _finding_summary(conn)
     except Exception:
         return None
-    if not last_scan and not rows:
+    total = exact["total"]
+    if not last_scan and not total:
         return None
 
     stale = True
@@ -1293,12 +1332,10 @@ def build_briefing(stale_after_hours: int = 12) -> Optional[str]:
             stale = (datetime.now(timezone.utc) - when).total_seconds() > stale_after_hours * 3600
         except (TypeError, ValueError):
             stale = True
-    if not stale and not rows:
+    if not stale and not total:
         return None
 
-    counts = {name: 0 for name in ("critical", "high", "medium", "low", "unknown")}
-    for row in rows:
-        counts[row.get("rating") or "unknown"] = counts.get(row.get("rating") or "unknown", 0) + 1
+    counts = exact["summary"]
     lines = ["RookGuard briefing:"]
     if last_scan:
         lines.append(
@@ -1307,7 +1344,7 @@ def build_briefing(stale_after_hours: int = 12) -> Optional[str]:
         )
     else:
         lines.append("- No scan has run yet.")
-    if rows:
+    if total:
         lines.append(
             "- Open findings: "
             f"{counts['critical']} critical, {counts['high']} high, "

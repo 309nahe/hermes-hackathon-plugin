@@ -1,0 +1,22 @@
+# Draft catalog entry. Submit to NousResearch/hermes-agent as plugin-catalog/hermes-hackathon-plugin.yaml
+# after the plugin is implemented and a 40-char SHA is pinned.
+name: hermes-hackathon-plugin
+repo: https://github.com/309nahe/hermes-hackathon-plugin
+sha: 0000000000000000000000000000000000000000
+subdir: ""
+description: "TODO: one-line description"
+maintainer: 309nahe
+tier: community
+category: tools
+requires_hermes: ">=0.22.0"
+docs_url: https://github.com/309nahe/hermes-hackathon-plugin#readme
+version: "0.0.1"
+platforms:
+  - linux
+  - macos
+capabilities:
+  provides_tools:
+    - ping
+  provides_hooks: []
+  provides_middleware: []
+  requires_env: []

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+
+# Hermes runtime artifacts
+.hermes/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test/coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Bootstrap-generated
+hermes-agent/

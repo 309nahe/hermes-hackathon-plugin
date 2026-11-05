@@ -1,0 +1,18 @@
+name: hermes-hackathon-plugin
+version: "0.0.1"
+manifest_version: 2
+api_version: 1
+description: "Starter scaffold for the Hermes Agent Plugin Hackathon. Rename and implement before submission."
+author: "309nahe"
+license: "MIT"
+homepage: "https://github.com/309nahe/hermes-hackathon-plugin"
+requires_hermes: ">=0.22.0"
+provides_tools:
+  - ping
+provides_hooks: []
+capabilities: {}
+python_dependencies: []
+config_schema: {}
+tags:
+  - hackathon
+  - starter

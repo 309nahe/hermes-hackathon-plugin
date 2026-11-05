@@ -2,7 +2,7 @@
 # after the plugin is implemented and a 40-char SHA is pinned.
 name: hermes-hackathon-plugin
 repo: https://github.com/309nahe/hermes-hackathon-plugin
-sha: 0000000000000000000000000000000000000000
+sha: 129bcc0f1aae341207205a633a1fb83b653b00ef
 subdir: ""
 description: "TODO: one-line description"
 maintainer: 309nahe

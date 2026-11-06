@@ -1,6 +1,6 @@
 # UPDATE.md — workspace handoff for agentic coding
 
-Last updated: 2026-11-05. `main` @ `7a002f4`. Tests: 35 passed.
+Last updated: 2026-11-06. `main` @ `2ffe189` (plus the handoff commit that updates this file). Tests: 34 passed, 1 skipped without Hermes installed (35 passed with it).
 
 ## Repo
 - `309nahe/rookguard` — RookGuard, a Hermes Agent plugin: package inventory, cve.now CVE scanning, guided remediation.
@@ -27,6 +27,7 @@ cd /tmp && /tmp/hermes-agent/.venv/bin/python -m pytest -q /path/to/rookguard/te
 - #3 `fix(fix): verify the upgrade closed the finding` (CLOSED, PR #16, commit `517a367`) — `_targets` splits `fixed_version`/`scanned_version`; `_version_probe_command`/`_extract_installed_version`/`_probe_installed_version`/`_verify_upgrade`; `rookguard_fix` probes via same `terminal` dispatch after exit 0, marks `fixed` only if verified else `failed` with `verified_version`/`verification`.
 - #4 `fix(scan): resolve versions for hook-tracked packages` (CLOSED, PR #17, `aefc9ed`) — `_resolve_missing_versions` + `_resolve_package_version_local`; `rookguard_scan` resolves `""` versions (dispatch else local subprocess), persists, exposes `resolved_versions`/`unresolved_versions`; `_packages_for_check` → 3-tuple `(packages, skipped, unresolved)`.
 - #5 `fix(status): compute severity counts from all findings` (CLOSED, PR #18, `b63456b`) — `_finding_where` + `_finding_summary` (`GROUP BY rating`, no limit); `rookguard_status` keeps `groups` as page but exact `summary`/`total`; `build_briefing` uses exact summary.
+- `chore: drop hackathon references, rename repo to rookguard, remove reference PDFs` (`2ffe189`, pushed straight to `main` at the maintainer's request) — repo URLs now `309nahe/rookguard`, `hackathon` tag removed from `plugin.yaml`, submission task (#14) dropped, the two reference PDFs deleted from the tree (still in git history).
 - `docs: add AGENTS.md` (PR #15, `165d5a1`) — gh-only, branch+PR, atomic issues, quality gate.
 
 ## Open backlog (suggested order)
@@ -40,6 +41,7 @@ cd /tmp && /tmp/hermes-agent/.venv/bin/python -m pytest -q /path/to/rookguard/te
 - #13 `chore: pin 40-char SHA + open catalog PR` (fork `NousResearch/hermes-agent`, `plugin-catalog/rookguard.yaml`).
 
 ## Caveats
+- The GitHub repo itself must be renamed to `rookguard` in Settings (URLs in the tree already use the new name); then `git remote set-url origin https://github.com/309nahe/rookguard` in existing clones.
 - `plugin.yaml`/`plugin-catalog-entry.yaml` still `0.0.1` (#12). Catalog SHA still scaffold (#13).
 - `dpkg` rows inventoried but skipped in scans until #6 or upstream fix.
 - `cargo` never uses sudo. Briefing injects on first turn / session start.

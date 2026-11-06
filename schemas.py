@@ -1,4 +1,4 @@
-"""Tool JSON schemas for RookGuard (hermes-hackathon-plugin).
+"""Tool JSON schemas for RookGuard (rookguard).
 
 RookGuard keeps an inventory of the host's packages, scans it against
 cve.now, reports prioritized findings with fixed versions, and applies

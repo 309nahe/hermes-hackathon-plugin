@@ -15,7 +15,7 @@ requests, checks, reviews and releases. Do not drive GitHub through the web UI.
 
 For every issue fix:
 
-1. Read the issue first: `gh issue view <n> -R 309nahe/hermes-hackathon-plugin`.
+1. Read the issue first: `gh issue view <n> -R 309nahe/rookguard`.
 2. Create a branch off `main` named `<type>/<issue-number>-<short-slug>`, e.g.
    `fix/3-verify-upgrade` or `feat/6-osv-dpkg-fallback`.
 3. Implement the smallest change that satisfies the issue, with tests.
@@ -54,8 +54,8 @@ Run from a neutral working directory (not the repo root, where the local
 `tools.py` can shadow Hermes's `tools` package):
 
 ```bash
-cd /tmp && pytest -q /path/to/hermes-hackathon-plugin/tests/
-hermes plugins validate /path/to/hermes-hackathon-plugin --install-deps
+cd /tmp && pytest -q /path/to/rookguard/tests/
+hermes plugins validate /path/to/rookguard --install-deps
 ```
 
 CI must pass. Never re-add `|| true` or `continue-on-error: true` to a test

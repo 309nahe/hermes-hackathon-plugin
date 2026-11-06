@@ -3,20 +3,20 @@
 Last updated: 2026-11-05. `main` @ `7a002f4`. Tests: 35 passed.
 
 ## Repo
-- `309nahe/hermes-hackathon-plugin` — RookGuard, a Hermes Agent plugin: package inventory, cve.now CVE scanning, guided remediation.
+- `309nahe/rookguard` — RookGuard, a Hermes Agent plugin: package inventory, cve.now CVE scanning, guided remediation.
 - Key files: `tools.py` (all handlers), `schemas.py`, `__init__.py`, `plugin.yaml` (`rookguard`, `0.0.1`), `plugin-catalog-entry.yaml` (draft, SHA still scaffold `129bcc0…`), `README.md`, `skills/vuln-triage/SKILL.md`, `tests/test_plugin.py`, `.github/workflows/ci.yml`.
 - Tests load `__init__.py` as a package (`submodule_search_locations`); integration test derives plugin name from `plugin.yaml`.
 - Validation: only expected `sudo_usage` caution. Upstream dpkg gap: https://github.com/sazabi/cve.now/issues/6 (OPEN).
 
 ## How to resume on a new workspace / VPS
 ```bash
-git clone git@github.com:309nahe/hermes-hackathon-plugin.git && cd hermes-hackathon-plugin
+git clone git@github.com:309nahe/rookguard.git && cd rookguard
 git log --oneline -5; cat UPDATE.md
 # quality gate (run from /tmp, NOT the repo root — local tools.py shadows Hermes tools):
-cd /tmp && /tmp/hermes-agent/.venv/bin/python -m pytest -q /path/to/hermes-hackathon-plugin/tests/
+cd /tmp && /tmp/hermes-agent/.venv/bin/python -m pytest -q /path/to/rookguard/tests/
 # needs Hermes agent checkout with .venv at /tmp/hermes-agent (clone NousResearch/hermes-agent + uv sync --group dev if missing):
-/tmp/hermes-agent/.venv/bin/hermes plugins validate /path/to/hermes-hackathon-plugin --install-deps
-/tmp/hermes-agent/.venv/bin/ruff check --select F,E9 /path/to/hermes-hackathon-plugin
+/tmp/hermes-agent/.venv/bin/hermes plugins validate /path/to/rookguard --install-deps
+/tmp/hermes-agent/.venv/bin/ruff check --select F,E9 /path/to/rookguard
 ```
 - Always `gh` for GitHub. Never push to `main` (except this file, see AGENTS.md). Branch per issue: `<type>/<n>-<slug>`, one PR per issue with `Closes #n`, do not merge.
 
@@ -38,7 +38,6 @@ cd /tmp && /tmp/hermes-agent/.venv/bin/python -m pytest -q /path/to/hermes-hacka
 - #7 `docs: macOS support (pip/npm only, no dpkg)`.
 - #12 `chore: bump to 0.1.0` (both yamls, quoted).
 - #13 `chore: pin 40-char SHA + open catalog PR` (fork `NousResearch/hermes-agent`, `plugin-catalog/rookguard.yaml`).
-- #14 `submission: <90s demo + Typeform` (before Nov 11 2026 5 PM EST) — preseed `requests==2.28.0`, record inventory→scan→status→fix→briefing, post on X tagging `@NousResearch`.
 
 ## Caveats
 - `plugin.yaml`/`plugin-catalog-entry.yaml` still `0.0.1` (#12). Catalog SHA still scaffold (#13).

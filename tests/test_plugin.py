@@ -1,4 +1,4 @@
-"""Tests for RookGuard (hermes-hackathon-plugin).
+"""Tests for RookGuard (rookguard).
 
 The handler modules are loaded as part of the plugin *package* (the way Hermes
 loads ``hermes_plugins.<slug>``), never as a bare top-level ``tools`` module:

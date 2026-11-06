@@ -5,7 +5,7 @@ api_version: 1
 description: "Track, scan, fix: inventory the packages on the host where the agent runs, scan them nightly against cve.now, and present prioritized findings with user-approved upgrades."
 author: "309nahe"
 license: "MIT"
-homepage: "https://github.com/309nahe/hermes-hackathon-plugin"
+homepage: "https://github.com/309nahe/rookguard"
 requires_hermes: ">=0.22.0"
 provides_tools:
   - rookguard_inventory
@@ -28,4 +28,3 @@ tags:
   - inventory
   - cve
   - remediation
-  - hackathon

@@ -64,8 +64,8 @@ A bundled skill `vuln-triage` explains how to read and prioritize findings.
 ## Install (development)
 
 ```bash
-git clone https://github.com/309nahe/hermes-hackathon-plugin
-cd hermes-hackathon-plugin
+git clone https://github.com/309nahe/rookguard
+cd rookguard
 ./scripts/bootstrap.sh
 ```
 
